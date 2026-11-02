@@ -29,6 +29,7 @@ var supportCrypto = map[Crypto]CoinId{
 
 // TradeType 交易类型，当下类型开始增多，现在这里统一管理、尽量收缩配置项
 var registry = map[TradeType]TradeTypeConf{
+	Binance: {Alias: "USDT・Binance Pay", NetworkName: "Binance Pay", Network: "binance", Crypto: USDT, Decimal: -8, AmountRange: usdGeneralRange, AddrCaseSens: true},
 	UsdtTon: {
 		Alias:        "USDT・Ton",
 		NetworkName:  "Ton",

@@ -1310,7 +1310,16 @@
         if (networkInstruction) networkInstruction.textContent = t('instruction.networkUse', {network: networkText});
         if (amountInstruction) amountInstruction.textContent = t('instruction.amount');
 
-        renderQrCode(address);
+        var binance = selectedMethod.network === 'binance';
+        var label = document.querySelector('[data-i18n="transfer.address"]');
+        if (label) label.textContent = binance ? 'Binance UID' : t('transfer.address');
+        if (binance) {
+            if (networkInstruction) networkInstruction.textContent = 'Binance Pay: transfer USDT to this UID. 请在币安内向下方 UID 转账。';
+            var qr = $('#qrcode');
+            if (qr) qr.textContent = 'Use the exact amount shown. 金额必须完全一致。';
+        } else {
+            renderQrCode(address);
+        }
     }
 
     function renderQrCode(address) {

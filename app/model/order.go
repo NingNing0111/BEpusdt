@@ -134,7 +134,7 @@ func (o *Order) MatchFingerprint(fingerprint string) bool {
 func (o *Order) SetExpired() {
 	o.Status = OrderStatusExpired
 
-	Db.Save(o)
+	Db.Model(o).Where("status = ?", OrderStatusWaiting).Update("status", OrderStatusExpired)
 }
 
 func (o *Order) SetSuccess() {

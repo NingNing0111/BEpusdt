@@ -46,7 +46,10 @@ var buildMutex sync.Mutex
 func StartBuildOrder(p OrderParams) (Order, error) {
 	var order Order
 
-	if p.Address != "" {
+	if p.TradeType == Binance && (p.AddressLocked || !p.Money.IsPositive()) {
+		return order, fmt.Errorf("Binance Pay 必须指定正数金额")
+	}
+	if p.Address != "" && p.TradeType != Binance {
 		if !utils.IsValidTronAddress(p.Address) &&
 			!utils.IsValidEvmAddress(p.Address) &&
 			!utils.IsValidSolanaAddress(p.Address) &&
@@ -81,7 +84,7 @@ func StartBuildOrder(p OrderParams) (Order, error) {
 		return order, nil
 	}
 	if order.Status == OrderStatusWaiting {
-		return RebuildOrder(order, p)
+		return rebuildOrder(order, p)
 	}
 
 	data, err := BuildTrade(p)
@@ -136,6 +139,9 @@ func BuildOrder(p OrderParams, trade Trade) (Order, error) {
 }
 
 func BuildTrade(p OrderParams) (Trade, error) {
+	if p.TradeType == Binance && (p.AddressLocked || !p.Money.IsPositive()) {
+		return Trade{}, fmt.Errorf("Binance Pay 必须指定正数金额")
+	}
 	// 获取代币类型
 	crypto, err := GetCrypto(p.TradeType)
 	if err != nil {
@@ -181,6 +187,12 @@ func BuildTrade(p OrderParams) (Trade, error) {
 }
 
 func RebuildOrder(t Order, p OrderParams) (Order, error) {
+	buildMutex.Lock()
+	defer buildMutex.Unlock()
+	return rebuildOrder(t, p)
+}
+
+func rebuildOrder(t Order, p OrderParams) (Order, error) {
 	if p.OrderId == t.OrderId && p.TradeType == t.TradeType && p.Money.String() == t.Money && p.Fiat == t.Fiat {
 		return t, nil
 	}
@@ -204,7 +216,7 @@ func RebuildOrder(t Order, p OrderParams) (Order, error) {
 	t.Rate = fmt.Sprintf("%v", data.Rate)
 	t.ExpiredAt = CalcTradeExpiredAt(p.Timeout)
 
-	query := Db.Model(&Order{}).Where("id = ?", t.ID)
+	query := Db.Model(&Order{}).Where("id = ? AND status = ?", t.ID, OrderStatusWaiting)
 	if p.ClientFingerprint != "" {
 		query = query.Where("(client_fingerprint = '' OR client_fingerprint = ?)", p.ClientFingerprint)
 	}

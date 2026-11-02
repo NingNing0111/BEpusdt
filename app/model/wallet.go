@@ -2,6 +2,7 @@ package model
 
 import (
 	"errors"
+	"regexp"
 	"strings"
 
 	"github.com/v03413/bepusdt/app/conf"
@@ -43,6 +44,11 @@ func (wa *Wallet) Validate() error {
 	wa.MatchAddr = wa.Address
 
 	switch tradeType {
+	case Binance:
+		if !regexp.MustCompile(`^[1-9][0-9]{0,19}$`).MatchString(wa.Address) {
+			return errors.New("请输入正确的币安收款用户 UID")
+		}
+		return nil
 	case TronTrx, UsdtTrc20, UsdcTrc20:
 		if !utils.IsValidTronAddress(wa.Address) {
 			return errors.New("钱包地址格式不合法，请检查")
