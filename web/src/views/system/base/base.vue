@@ -46,6 +46,9 @@
               <a-tab-pane key="5" title="MQTT设置">
                 <Mqtt v-model="Conf" @refresh="refresh" />
               </a-tab-pane>
+              <a-tab-pane key="6" title="Binance Pay">
+                <Binance />
+              </a-tab-pane>
               <a-tab-pane key="3" title="安全设置">
                 <Security v-model="Conf" @refresh="refresh" />
               </a-tab-pane>
@@ -58,6 +61,7 @@
 </template>
 
 <script setup lang="ts">
+import Binance from "./components/binance.vue";
 import Info from "./components/info.vue";
 import Security from "./components/security.vue";
 import Api from "./components/api.vue";

@@ -92,7 +92,7 @@ func StartBuildOrder(p OrderParams) (Order, error) {
 		return order, nil
 	}
 	if order.Status == OrderStatusWaiting {
-		return RebuildOrder(order, p)
+		return rebuildOrder(order, p)
 	}
 
 	data, err := BuildTrade(p)
@@ -195,6 +195,12 @@ func BuildTrade(p OrderParams) (Trade, error) {
 }
 
 func RebuildOrder(t Order, p OrderParams) (Order, error) {
+	buildMutex.Lock()
+	defer buildMutex.Unlock()
+	return rebuildOrder(t, p)
+}
+
+func rebuildOrder(t Order, p OrderParams) (Order, error) {
 	if p.TradeType == Binance && t.AddressLocked {
 		return t, fmt.Errorf("Binance Pay 不支持地址独占订单")
 	}
@@ -221,7 +227,7 @@ func RebuildOrder(t Order, p OrderParams) (Order, error) {
 	t.Rate = fmt.Sprintf("%v", data.Rate)
 	t.ExpiredAt = CalcTradeExpiredAt(p.Timeout)
 
-	query := Db.Model(&Order{}).Where("id = ?", t.ID)
+	query := Db.Model(&Order{}).Where("id = ? AND status = ?", t.ID, OrderStatusWaiting)
 	if p.ClientFingerprint != "" {
 		query = query.Where("(client_fingerprint = '' OR client_fingerprint = ?)", p.ClientFingerprint)
 	}

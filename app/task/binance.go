@@ -6,12 +6,10 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"strconv"
 	"time"
 
@@ -21,7 +19,7 @@ import (
 	"gorm.io/gorm"
 )
 
-type binanceTrade struct {
+type binanceTransaction struct {
 	OrderType string `json:"orderType"`
 	ID        string `json:"transactionId"`
 	Time      int64  `json:"transactionTime"`
@@ -33,140 +31,130 @@ type binanceTrade struct {
 }
 
 type binanceClient struct {
-	client                *http.Client
-	endpoint, key, secret string
+	client            *http.Client
+	base, key, secret string
 }
 
-func (c binanceClient) history(ctx context.Context, start, end int64) ([]binanceTrade, error) {
+func (b binanceClient) history(ctx context.Context, start, end int64) ([]binanceTransaction, error) {
 	q := url.Values{"startTime": {strconv.FormatInt(start, 10)}, "endTime": {strconv.FormatInt(end, 10)}, "limit": {"100"}, "recvWindow": {"5000"}, "timestamp": {strconv.FormatInt(time.Now().UnixMilli(), 10)}}
-	mac := hmac.New(sha256.New, []byte(c.secret))
+	mac := hmac.New(sha256.New, []byte(b.secret))
 	mac.Write([]byte(q.Encode()))
-	req, err := http.NewRequestWithContext(ctx, "GET", c.endpoint+"/sapi/v1/pay/transactions?"+q.Encode()+"&signature="+hex.EncodeToString(mac.Sum(nil)), nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", b.base+"/sapi/v1/pay/transactions?"+q.Encode()+"&signature="+hex.EncodeToString(mac.Sum(nil)), nil)
 	if err != nil {
-		return nil, errors.New("invalid Binance request")
+		return nil, fmt.Errorf("invalid Binance request")
 	}
-	req.Header.Set("X-MBX-APIKEY", c.key)
-	resp, err := c.client.Do(req)
-	// Do not log transport errors containing signed URLs.
+	req.Header.Set("X-MBX-APIKEY", b.key)
+	resp, err := b.client.Do(req)
 	if err != nil {
-		return nil, errors.New("Binance API connection failed")
-	}
+		return nil, fmt.Errorf("Binance request failed")
+	} // never log signed URLs
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("Binance API HTTP %d", resp.StatusCode)
+		return nil, fmt.Errorf("Binance HTTP status %d", resp.StatusCode)
 	}
 	var result struct {
-		Code    string         `json:"code"`
-		Success bool           `json:"success"`
-		Data    []binanceTrade `json:"data"`
+		Code    string               `json:"code"`
+		Success bool                 `json:"success"`
+		Data    []binanceTransaction `json:"data"`
 	}
-	if err := json.NewDecoder(io.LimitReader(resp.Body, 4<<20)).Decode(&result); err != nil {
-		return nil, errors.New("invalid Binance response")
+	if err = json.NewDecoder(io.LimitReader(resp.Body, 4<<20)).Decode(&result); err != nil {
+		return nil, fmt.Errorf("invalid Binance response")
 	}
 	if !result.Success || result.Code != "000000" {
-		return nil, errors.New("Binance API rejected history request")
+		return nil, fmt.Errorf("Binance API rejected request")
+	}
+	// A full page might omit records. Split the time range, including tied timestamps.
+	if len(result.Data) >= 100 {
+		if start >= end {
+			return nil, fmt.Errorf("Binance history saturated at one millisecond")
+		}
+		mid := start + (end-start)/2
+		left, err := b.history(ctx, start, mid)
+		if err != nil {
+			return nil, err
+		}
+		right, err := b.history(ctx, mid+1, end)
+		if err != nil {
+			return nil, err
+		}
+		return append(left, right...), nil
 	}
 	return result.Data, nil
 }
 
-// Split saturated intervals instead of silently losing records at the 100-row limit.
-func (c binanceClient) scan(ctx context.Context, start, end int64) ([]binanceTrade, error) {
-	rows, err := c.history(ctx, start, end)
-	if err != nil {
-		return nil, err
+func init() { Register(Task{Duration: time.Minute, Callback: pollBinance}) }
+
+func pollBinance(ctx context.Context) {
+	credentials := model.GetBinanceCredentials()
+	if !model.ValidBinanceUID(credentials.UID) || credentials.APIKey == "" || credentials.APISecret == "" {
+		return
 	}
-	if len(rows) < 100 {
-		return rows, nil
-	}
-	if end <= start {
-		return nil, errors.New("Binance history saturated within one millisecond; manual reconciliation required")
-	}
-	mid := start + (end-start)/2
-	a, err := c.scan(ctx, start, mid)
-	if err != nil {
-		return nil, err
-	}
-	b, err := c.scan(ctx, mid+1, end)
-	if err != nil {
-		return nil, err
-	}
-	return append(a, b...), nil
+	pollBinanceClient(ctx, binanceClient{client: &http.Client{Timeout: 15 * time.Second}, base: "https://api.binance.com", key: credentials.APIKey, secret: credentials.APISecret})
 }
 
-func init() { Register(Task{Duration: time.Minute, Callback: binancePoll}) }
-
-func binancePoll(ctx context.Context) {
-	if !model.BinanceConfigured() {
-		return
-	}
+func pollBinanceClient(ctx context.Context, b binanceClient) {
 	var orders []model.Order
-	if err := model.Db.Where("trade_type = ? AND status in (?) AND expired_at > ?", model.Binance, []int{model.OrderStatusWaiting, model.OrderStatusExpired}, time.Now().Add(model.GetLookbackHour())).Order("created_at asc").Find(&orders).Error; err != nil || len(orders) == 0 {
+	if err := model.Db.Where("trade_type = ? AND status IN ? AND expired_at > ?", model.Binance, []int{model.OrderStatusWaiting, model.OrderStatusExpired}, time.Now().Add(model.GetLookbackHour())).Order("created_at asc").Find(&orders).Error; err != nil || len(orders) == 0 {
 		return
 	}
-	start := orders[0].CreatedAt.Time().UnixMilli()
-	now := time.Now().UnixMilli()
-	// Only order windows within Binance's supported query interval are scanned.
-	if start < now-int64(90*24*time.Hour/time.Millisecond) {
-		start = now - int64(90*24*time.Hour/time.Millisecond)
-	}
-	c := binanceClient{&http.Client{Timeout: 15 * time.Second}, "https://api.binance.com", os.Getenv("BINANCE_API_KEY"), os.Getenv("BINANCE_API_SECRET")}
-	rows, err := c.scan(ctx, start, now)
+	ctx, cancel := context.WithTimeout(ctx, 25*time.Second)
+	defer cancel()
+	records, err := b.history(ctx, orders[0].CreatedAt.Time().UnixMilli(), time.Now().UnixMilli())
 	if err != nil {
 		log.Task.Warn("Binance Pay: ", err)
 		return
 	}
-	for _, row := range rows {
-		for i, o := range orders {
-			if !binanceMatches(o, row, model.BinanceUID()) {
+	for _, record := range records {
+		for _, order := range orders {
+			if !binanceMatches(order, record) {
 				continue
 			}
-			paid, err := settleBinance(&o, row)
+			paid, err := settleBinance(order, record)
 			if err != nil {
-				log.Task.Warn("Binance Pay settlement failed")
+				log.Task.Warn("Binance settlement failed: ", err)
+				break
 			}
 			if paid {
-				orders[i] = o
-				notifyOrderSuccess(o)
+				if err := model.Db.First(&order, order.ID).Error; err == nil {
+					notifyOrderSuccess(order)
+				}
 			}
 			break
 		}
 	}
 }
 
-func binanceMatches(o model.Order, r binanceTrade, uid string) bool {
+func binanceMatches(o model.Order, r binanceTransaction) bool {
 	amount, err := decimal.NewFromString(r.Amount)
-	if err != nil || !amount.IsPositive() {
-		return false
-	}
-	target, err := decimal.NewFromString(o.Amount)
-	if err != nil {
-		return false
-	}
-	at := time.UnixMilli(r.Time)
-	return (o.Status == model.OrderStatusWaiting || o.Status == model.OrderStatusExpired) && o.TradeType == model.Binance && !o.AddressLocked && o.Address == uid && r.Receiver.UID == uid && r.ID != "" && (r.OrderType == "C2C" || r.OrderType == "PAY") && r.Currency == "USDT" && amount.Equal(target) && o.CreatedAt != nil && !at.Before(o.CreatedAt.Time()) && at.Before(o.ExpiredAt)
+	target, e := decimal.NewFromString(o.Amount)
+	return err == nil && e == nil && amount.IsPositive() && amount.Equal(target) && !o.AddressLocked && o.TradeType == model.Binance && (r.OrderType == "C2C" || r.OrderType == "PAY") && r.ID != "" && r.Currency == "USDT" && r.Receiver.UID == orderMatchAddress(o) && o.CreatedAt != nil && r.Time >= o.CreatedAt.Time().UnixMilli() && r.Time < o.ExpiredAt.UnixMilli()
 }
 
-func settleBinance(o *model.Order, r binanceTrade) (bool, error) {
+func settleBinance(o model.Order, r binanceTransaction) (bool, error) {
+	paid := false
 	err := model.Db.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Create(&model.BinanceReceipt{TransactionID: r.ID, OrderID: o.ID}).Error; err != nil {
+		receipt := model.BinanceReceipt{TransactionID: r.ID, OrderID: o.ID}
+		// Unique transaction and order constraints, plus conditional status update, make replay safe.
+		var count int64
+		if err := tx.Model(&model.BinanceReceipt{}).Where("transaction_id = ? OR order_id = ?", r.ID, o.ID).Count(&count).Error; err != nil {
+			return err
+		}
+		if count > 0 {
+			return nil
+		}
+		if err := tx.Create(&receipt).Error; err != nil {
 			return err
 		}
 		at := time.UnixMilli(r.Time)
-		result := tx.Model(&model.Order{}).Where("id = ? AND trade_type = ? AND status in (?) AND address = ? AND amount = ? AND created_at <= ? AND expired_at > ? AND address_locked = ?", o.ID, model.Binance, []int{model.OrderStatusWaiting, model.OrderStatusExpired}, o.Address, o.Amount, at, at, false).Updates(map[string]any{"status": model.OrderStatusSuccess, "ref_hash": "binance:" + r.ID, "confirmed_at": at})
-		if result.Error != nil {
-			return result.Error
+		res := tx.Model(&model.Order{}).Where("id = ? AND status IN ? AND trade_type = ? AND amount = ? AND match_address = ? AND expired_at = ?", o.ID, []int{model.OrderStatusWaiting, model.OrderStatusExpired}, model.Binance, o.Amount, orderMatchAddress(o), o.ExpiredAt).Updates(map[string]any{"status": model.OrderStatusSuccess, "ref_hash": "binance:" + r.ID, "confirmed_at": at})
+		if res.Error != nil {
+			return res.Error
 		}
-		if result.RowsAffected != 1 {
-			return errors.New("order no longer payable")
+		if res.RowsAffected != 1 {
+			return fmt.Errorf("order changed during settlement")
 		}
+		paid = true
 		return nil
 	})
-	if err != nil {
-		return false, err
-	}
-	// Reload the committed state for existing callback and notification handlers.
-	if err := model.Db.First(o, o.ID).Error; err != nil {
-		return false, err
-	}
-	return true, nil
+	return paid && err == nil, err
 }

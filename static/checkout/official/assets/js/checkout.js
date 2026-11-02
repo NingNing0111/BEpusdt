@@ -684,11 +684,11 @@
         renderWalletAddress(paymentAddress);
         var addr = document.getElementById('addressLabelQ');
         if (addr) addr.textContent = network === 'binance' ? 'Binance UID' : _t('receivingAddress', '收款地址');
+        $('#qrcode').empty();
         if (network === 'binance') {
-            document.getElementById('payNetworkQ').textContent = 'Binance Pay · USDT';
-            $('#qrcode').empty().text('Binance → Pay → Send → Binance UID: ' + paymentAddress + '. Send exactly ' + amount + ' USDT. 请按精确金额转账，勿使用链上提现。');
+            $('#qrcode').text('Binance Pay: transfer USDT to this UID using the exact amount shown. 请在币安内向下方 UID 转账，金额必须完全一致。');
         } else {
-            $('#qrcode').empty().qrcode({ text: paymentAddress, width: 200, height: 200 });
+            $('#qrcode').qrcode({ text: paymentAddress, width: 200, height: 200 });
         }
         updateQrPaymentLogo(currency, network);
         updateReselectButton();
