@@ -43,6 +43,11 @@ func (wa *Wallet) Validate() error {
 	wa.MatchAddr = wa.Address
 
 	switch tradeType {
+	case Binance:
+		if !ValidBinanceUID(wa.Address) {
+			return errors.New("请输入有效的币安用户 UID（仅数字）")
+		}
+		return nil
 	case TronTrx, UsdtTrc20, UsdcTrc20:
 		if !utils.IsValidTronAddress(wa.Address) {
 			return errors.New("钱包地址格式不合法，请检查")
@@ -144,6 +149,12 @@ func (wa *Wallet) GetMatchAddr() string {
 
 func GetAvailableWallets(t TradeType) []Wallet {
 	var wallets = make([]Wallet, 0)
+	if t == Binance {
+		if BinanceConfigured() {
+			wallets = append(wallets, Wallet{Address: BinanceUID(), MatchAddr: BinanceUID(), TradeType: string(Binance), Status: WaStatusEnable})
+		}
+		return wallets
+	}
 
 	Db.Where("trade_type = ? and status = ?", t, WaStatusEnable).Find(&wallets)
 

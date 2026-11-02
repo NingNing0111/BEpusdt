@@ -122,6 +122,7 @@ func initPostgres(dsn string) error {
 func AutoMigrate() error {
 	return migration.Run(Db, []any{
 		&Wallet{},
+		&BinanceReceipt{},
 		&Order{},
 		&NotifyRecord{},
 		&Conf{},

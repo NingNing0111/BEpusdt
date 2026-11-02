@@ -28,6 +28,7 @@ const (
 	OrderStatusConfirming = 5 // 等待交易确认
 	OrderStatusFailed     = 6 // 交易确认失败
 
+	Binance     TradeType = "binance"
 	BscBnb      TradeType = "bsc.bnb"
 	EthereumEth TradeType = "ethereum.eth"
 	TronTrx     TradeType = "tron.trx"
@@ -372,6 +373,9 @@ func GetNotifyFailedTradeOrders() ([]Order, error) {
 
 // CalcTradeAmount 计算当前实际可用的交易金额
 func CalcTradeAmount(wallets []Wallet, rate decimal.Decimal, p OrderParams) (Wallet, string, error) {
+	if p.TradeType == Binance && (p.AddressLocked || !p.Money.IsPositive()) {
+		return Wallet{}, "", errors.New("Binance Pay 只支持固定金额订单")
+	}
 	if p.AddressLocked {
 		return LockTradeAddress(wallets, p.TradeType)
 	}

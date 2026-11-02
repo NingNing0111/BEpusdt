@@ -683,8 +683,13 @@
         var paymentAddress = d.token || d.address || '';
         renderWalletAddress(paymentAddress);
         var addr = document.getElementById('addressLabelQ');
-        if (addr) addr.textContent = _t('receivingAddress', '收款地址');
-        $('#qrcode').empty().qrcode({ text: paymentAddress, width: 200, height: 200 });
+        if (addr) addr.textContent = network === 'binance' ? 'Binance UID' : _t('receivingAddress', '收款地址');
+        if (network === 'binance') {
+            document.getElementById('payNetworkQ').textContent = 'Binance Pay · USDT';
+            $('#qrcode').empty().text('Binance → Pay → Send → Binance UID: ' + paymentAddress + '. Send exactly ' + amount + ' USDT. 请按精确金额转账，勿使用链上提现。');
+        } else {
+            $('#qrcode').empty().qrcode({ text: paymentAddress, width: 200, height: 200 });
+        }
         updateQrPaymentLogo(currency, network);
         updateReselectButton();
         bindHelp('helpBtnQ', d.support_url);
