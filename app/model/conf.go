@@ -128,11 +128,14 @@ func GetC(k ConfKey) string {
 
 func RefreshC() {
 	var rows = make([]Conf, 0)
-	Db.Find(&rows)
+	if result := Db.Find(&rows); result.Error != nil {
+		return
+	}
 
 	for _, row := range rows {
 		confCache.Store(row.K, row.V)
 	}
+	refreshBinanceCredentials(rows)
 }
 
 func CheckoutUrl(host, id string) string {

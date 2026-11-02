@@ -10,6 +10,8 @@ func adminInit(e *gin.Engine) {
 	var confHdr = new(admin.Conf)
 	{
 		GetRegister(confRtr, "/rpc", true, confHdr.Rpc)
+		GetRegister(confRtr, "/binance", true, confHdr.BinanceGet)
+		PostRegister(confRtr, "/binance", true, confHdr.BinanceSet)
 		PostRegister(confRtr, "/set", true, confHdr.Set)
 		PostRegister(confRtr, "/get", true, confHdr.Get)
 		PostRegister(confRtr, "/del", true, confHdr.Del)

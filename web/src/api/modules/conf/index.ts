@@ -82,3 +82,7 @@ export {
   getRpcConfAPI,
   checkoutListAPI
 };
+
+export const getBinanceConfAPI = () => axios({ url: "/api/conf/binance", method: "get" });
+export const setBinanceConfAPI = (data: { uid: string; api_key: string; api_secret: string; clear_credentials: boolean }) =>
+  axios({ url: "/api/conf/binance", method: "post", data });

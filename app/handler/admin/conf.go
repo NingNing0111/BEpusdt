@@ -40,6 +40,10 @@ func (Conf) Set(ctx *gin.Context) {
 		return
 	}
 
+	if model.IsBinanceConfKey(model.ConfKey(strings.TrimSpace(req.Key))) {
+		base.BadRequest(ctx, "请通过 Binance Pay 配置接口修改")
+		return
+	}
 	model.SetK(model.ConfKey(strings.TrimSpace(req.Key)), strings.TrimSpace(req.Value))
 
 	defer model.RefreshC()
@@ -55,7 +59,11 @@ func (Conf) Get(ctx *gin.Context) {
 		return
 	}
 
-	base.Ok(ctx, gin.H{"key": req.Key, "value": model.GetK(model.ConfKey(req.Key))})
+	value := ""
+	if !model.IsBinanceSecret(model.ConfKey(req.Key)) {
+		value = model.GetK(model.ConfKey(req.Key))
+	}
+	base.Ok(ctx, gin.H{"key": req.Key, "value": value})
 }
 
 func (Conf) Del(ctx *gin.Context) {
@@ -66,6 +74,10 @@ func (Conf) Del(ctx *gin.Context) {
 		return
 	}
 
+	if model.IsBinanceConfKey(model.ConfKey(req.Key)) {
+		base.BadRequest(ctx, "请通过 Binance Pay 配置接口修改")
+		return
+	}
 	model.Db.Where("k = ?", req.Key).Delete(&model.Conf{})
 
 	base.Ok(ctx, "删除成功")
@@ -84,7 +96,9 @@ func (Conf) Gets(ctx *gin.Context) {
 
 	var data = gin.H{}
 	for _, item := range items {
-		data[string(item.K)] = item.V
+		if !model.IsBinanceSecret(item.K) {
+			data[string(item.K)] = item.V
+		}
 	}
 
 	base.Ok(ctx, data)
@@ -102,6 +116,10 @@ func (Conf) Sets(ctx *gin.Context) {
 	data := make([]model.Conf, 0)
 	for _, item := range req {
 		var k = strings.TrimSpace(item.Key)
+		if model.IsBinanceConfKey(model.ConfKey(k)) {
+			base.BadRequest(ctx, "请通过 Binance Pay 配置接口修改")
+			return
+		}
 		var v = strings.TrimSpace(item.Value)
 		keys = append(keys, k)
 		data = append(data, model.Conf{K: model.ConfKey(k), V: v})

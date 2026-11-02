@@ -10,7 +10,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"strconv"
 	"time"
 
@@ -86,11 +85,11 @@ func (b binanceClient) history(ctx context.Context, start, end int64) ([]binance
 func init() { Register(Task{Duration: time.Minute, Callback: pollBinance}) }
 
 func pollBinance(ctx context.Context) {
-	key, secret := os.Getenv("BINANCE_API_KEY"), os.Getenv("BINANCE_API_SECRET")
-	if !model.BinanceConfigured() {
+	credentials := model.GetBinanceCredentials()
+	if !model.ValidBinanceUID(credentials.UID) || credentials.APIKey == "" || credentials.APISecret == "" {
 		return
 	}
-	pollBinanceClient(ctx, binanceClient{client: &http.Client{Timeout: 15 * time.Second}, base: "https://api.binance.com", key: key, secret: secret})
+	pollBinanceClient(ctx, binanceClient{client: &http.Client{Timeout: 15 * time.Second}, base: "https://api.binance.com", key: credentials.APIKey, secret: credentials.APISecret})
 }
 
 func pollBinanceClient(ctx context.Context, b binanceClient) {

@@ -5,9 +5,13 @@
 ## 配置
 
 1. 在收款币安账号创建可以查询 Pay 转账历史的 API Key，仅授予读取权限，不需要交易或提现权限。建议配置服务器 IP 白名单。
-2. 配置服务端环境变量 `BINANCE_UID`、`BINANCE_API_KEY`、`BINANCE_API_SECRET` 并重启服务。Docker 部署需要将变量传入容器；密钥不要填写在钱包备注中。
-3. `BINANCE_UID` 填写此 API Key 对应收款账号的 **币安用户 UID**；配置完整后自动显示 Binance Pay，无需新增钱包。这里使用 UID，不是 Pay ID，也不是链上地址。一个服务实例对应一个币安账号。
+2. 打开后台 **系统设置 → 基本设置 → Binance Pay**，填写收款 UID、API Key 和 API Secret 后保存。密钥仅用于读取 Pay 历史，保存后下一轮查询自动使用，无需重启。
+3. UID 填写此 API Key 对应收款账号的 **币安用户 UID**；配置完整后自动显示 Binance Pay，无需新增钱包。这里使用 UID，不是 Pay ID，也不是链上地址。一个服务实例对应一个币安账号。
 4. 商户指定 `trade_type=binance`（易支付为 `type=binance`），或让用户在内置收银台选择 USDT → Binance Pay。原签名、订单查询、异步回调和回调重试协议继续使用。
+
+后台不回显已保存的密钥，仅展示「已配置」状态；密钥输入框留空保留原值，填写新值替换。UID 留空可停用并保留密钥；勾选「清空已保存的 UID 和密钥，并停用 Binance Pay」后保存则清空全部配置。配置原子保存到现有配置数据库中，请保护数据库及备份。
+
+兼容原有环境变量 `BINANCE_UID`、`BINANCE_API_KEY`、`BINANCE_API_SECRET`：首次在后台保存前使用环境变量；保存后以整组后台配置为准，停用或清空也不会重新启用环境变量中的旧凭据。
 
 ## 买家使用
 
