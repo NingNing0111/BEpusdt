@@ -79,7 +79,7 @@ func TestBinanceMatchingAndReplay(t *testing.T) {
 		{"receiver", func(r *binanceTransaction) { r.Receiver.UID = "87654321" }},
 		{"refund", func(r *binanceTransaction) { r.OrderType = "PAY_REFUND" }},
 		{"expired", func(r *binanceTransaction) { r.Time = o.ExpiredAt.UnixMilli() }},
-		{"old", func(r *binanceTransaction) { r.Time = o.CreatedAt.Time().UnixMilli() }},
+		{"old", func(r *binanceTransaction) { r.Time = o.CreatedAt.Time().UnixMilli() - 1 }},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -140,6 +140,9 @@ func TestBinancePollCallbacksOnce(t *testing.T) {
 }
 
 func TestBinanceOrderAllocationAndUID(t *testing.T) {
+	t.Setenv("BINANCE_UID", "12345678")
+	t.Setenv("BINANCE_API_KEY", "test")
+	t.Setenv("BINANCE_API_SECRET", "test")
 	initTaskTestEnv(t, nil)
 	for _, uid := range []string{"", "0", "123abc", "0x12345678"} {
 		if _, err := model.NewWallet(uid, model.Binance); err == nil {

@@ -2,8 +2,6 @@ package model
 
 import "github.com/shopspring/decimal"
 
-const Binance TradeType = "binance"
-
 type ConfKey string
 type Fiat string
 type CoinId string

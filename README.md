@@ -98,6 +98,6 @@ docker run -d --restart=unless-stopped -p 8080:8080 v03413/bepusdt:latest
 ## 🌟 Star 历史
 
 [![Star History Chart](https://api.star-history.com/chart?repos=v03413/bepusdt&type=date&legend=top-left)](https://www.star-history.com/?repos=v03413%2Fbepusdt&type=date&legend=top-left)
-### Binance Pay 个人 UID 收款
+### Binance Pay 个人账户收款
 
-支持 USDT 个人转账自动核验与商户回调，支付方式 `binance`。配置与使用步骤见 [Binance Pay 接入说明](docs/BINANCE_PAY.md)。
+新增 `binance` 支付方式，支持个人 UID 转账、集成收银台、自动核验流水与商户回调。配置与使用说明见 [Binance Pay](docs/binance-pay.md)。

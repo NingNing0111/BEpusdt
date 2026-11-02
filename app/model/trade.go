@@ -46,8 +46,16 @@ var buildMutex sync.Mutex
 func StartBuildOrder(p OrderParams) (Order, error) {
 	var order Order
 
-	if p.TradeType == Binance && (p.AddressLocked || !p.Money.IsPositive()) {
-		return order, fmt.Errorf("Binance Pay 必须指定正数金额")
+	if p.TradeType == Binance {
+		if p.AddressLocked || !p.Money.IsPositive() {
+			return order, fmt.Errorf("Binance Pay 只支持固定金额订单")
+		}
+		if !BinanceConfigured() {
+			return order, fmt.Errorf("Binance Pay 未配置收款 UID 和只读 API 密钥")
+		}
+		if p.Address != "" && p.Address != BinanceUID() {
+			return order, fmt.Errorf("Binance Pay 收款 UID 与配置不一致")
+		}
 	}
 	if p.Address != "" && p.TradeType != Binance {
 		if !utils.IsValidTronAddress(p.Address) &&
@@ -139,8 +147,8 @@ func BuildOrder(p OrderParams, trade Trade) (Order, error) {
 }
 
 func BuildTrade(p OrderParams) (Trade, error) {
-	if p.TradeType == Binance && (p.AddressLocked || !p.Money.IsPositive()) {
-		return Trade{}, fmt.Errorf("Binance Pay 必须指定正数金额")
+	if p.TradeType == Binance && (!BinanceConfigured() || p.AddressLocked || !p.Money.IsPositive() || (p.Address != "" && p.Address != BinanceUID())) {
+		return Trade{}, fmt.Errorf("Binance Pay 配置无效或订单参数不支持")
 	}
 	// 获取代币类型
 	crypto, err := GetCrypto(p.TradeType)
@@ -193,6 +201,9 @@ func RebuildOrder(t Order, p OrderParams) (Order, error) {
 }
 
 func rebuildOrder(t Order, p OrderParams) (Order, error) {
+	if p.TradeType == Binance && t.AddressLocked {
+		return t, fmt.Errorf("Binance Pay 不支持地址独占订单")
+	}
 	if p.OrderId == t.OrderId && p.TradeType == t.TradeType && p.Money.String() == t.Money && p.Fiat == t.Fiat {
 		return t, nil
 	}

@@ -2,7 +2,6 @@ package model
 
 import (
 	"errors"
-	"regexp"
 	"strings"
 
 	"github.com/v03413/bepusdt/app/conf"
@@ -45,8 +44,8 @@ func (wa *Wallet) Validate() error {
 
 	switch tradeType {
 	case Binance:
-		if !regexp.MustCompile(`^[1-9][0-9]{0,19}$`).MatchString(wa.Address) {
-			return errors.New("请输入正确的币安收款用户 UID")
+		if !ValidBinanceUID(wa.Address) {
+			return errors.New("请输入有效的币安用户 UID（仅数字）")
 		}
 		return nil
 	case TronTrx, UsdtTrc20, UsdcTrc20:
@@ -150,6 +149,12 @@ func (wa *Wallet) GetMatchAddr() string {
 
 func GetAvailableWallets(t TradeType) []Wallet {
 	var wallets = make([]Wallet, 0)
+	if t == Binance {
+		if BinanceConfigured() {
+			wallets = append(wallets, Wallet{Address: BinanceUID(), MatchAddr: BinanceUID(), TradeType: string(Binance), Status: WaStatusEnable})
+		}
+		return wallets
+	}
 
 	Db.Where("trade_type = ? and status = ?", t, WaStatusEnable).Find(&wallets)
 

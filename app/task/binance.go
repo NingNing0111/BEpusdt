@@ -83,11 +83,11 @@ func (b binanceClient) history(ctx context.Context, start, end int64) ([]binance
 	return result.Data, nil
 }
 
-func init() { Register(Task{Duration: 30 * time.Second, Callback: pollBinance}) }
+func init() { Register(Task{Duration: time.Minute, Callback: pollBinance}) }
 
 func pollBinance(ctx context.Context) {
 	key, secret := os.Getenv("BINANCE_API_KEY"), os.Getenv("BINANCE_API_SECRET")
-	if key == "" || secret == "" {
+	if !model.BinanceConfigured() {
 		return
 	}
 	pollBinanceClient(ctx, binanceClient{client: &http.Client{Timeout: 15 * time.Second}, base: "https://api.binance.com", key: key, secret: secret})
@@ -128,7 +128,7 @@ func pollBinanceClient(ctx context.Context, b binanceClient) {
 func binanceMatches(o model.Order, r binanceTransaction) bool {
 	amount, err := decimal.NewFromString(r.Amount)
 	target, e := decimal.NewFromString(o.Amount)
-	return err == nil && e == nil && amount.IsPositive() && amount.Equal(target) && !o.AddressLocked && o.TradeType == model.Binance && r.OrderType == "C2C" && r.ID != "" && r.Currency == "USDT" && r.Receiver.UID == orderMatchAddress(o) && o.CreatedAt != nil && r.Time > o.CreatedAt.Time().UnixMilli() && r.Time < o.ExpiredAt.UnixMilli()
+	return err == nil && e == nil && amount.IsPositive() && amount.Equal(target) && !o.AddressLocked && o.TradeType == model.Binance && (r.OrderType == "C2C" || r.OrderType == "PAY") && r.ID != "" && r.Currency == "USDT" && r.Receiver.UID == orderMatchAddress(o) && o.CreatedAt != nil && r.Time >= o.CreatedAt.Time().UnixMilli() && r.Time < o.ExpiredAt.UnixMilli()
 }
 
 func settleBinance(o model.Order, r binanceTransaction) (bool, error) {
